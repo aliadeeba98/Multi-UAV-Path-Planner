@@ -5,7 +5,7 @@ import os
 import random
 from typing import List, Tuple
 
-from app.algorithms import plan_paths
+from traverse.algorithms import plan_paths
 
 app = FastAPI(title="TRAVERSE: Multi-UAV Path Planner")
 
@@ -120,3 +120,16 @@ async def execute_plan(request: PlanRequest):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Planning execution error: {str(e)}")
+
+def run_server(host="127.0.0.1", port=8000):
+    import uvicorn
+    import webbrowser
+    from threading import Timer
+
+    def open_browser():
+        webbrowser.open(f"http://{host}:{port}/")
+
+    # Open the browser 1 second after starting the server
+    Timer(1.0, open_browser).start()
+    print(f"\n[TRAVERSE] Starting Multi-UAV Path Planner GUI at http://{host}:{port}/ ...\n")
+    uvicorn.run("traverse.main:app", host=host, port=port, log_level="info")

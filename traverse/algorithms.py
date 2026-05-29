@@ -1,8 +1,8 @@
-from app import astar
-from app import dstarlite
-from app import qlearning
-from app import pso_sac
-from app import deep_rl
+from traverse import astar
+from traverse import dstarlite
+from traverse import qlearning
+from traverse import pso_sac
+from traverse import deep_rl
 
 def plan_paths(grid_size, obstacles, starts, goals, algorithm):
     """

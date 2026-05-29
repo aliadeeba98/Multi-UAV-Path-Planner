@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "traverse"
+version = "1.0.0"
+description = "TRAVERSE: Multi-UAV Path Planner using A*, D*, Q-Learning, DQN, SAC, and Hybrid PSO-SAC"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy>=1.20.0",
+    "torch>=1.9.0",
+    "tensorflow>=2.5.0",
+    "fastapi>=0.95.0",
+    "uvicorn>=0.20.0",
+    "pydantic>=1.10.0",
+]
+
+[project.scripts]
+traverse = "traverse.cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["traverse*"]
+
+[tool.setuptools.package-data]
+traverse = ["templates/*", "templates/**/*"]
