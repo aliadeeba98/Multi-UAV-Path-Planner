@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TRAVERSE: Multi-UAV Path Planner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-main: #0f172a; /* Slate 900 */
+            --bg-panel: #1e293b; /* Slate 800 */
+            --border-color: #334155; /* Slate 700 */
+            --border-hover: #475569; /* Slate 600 */
+            --text-primary: #f8fafc; /* Slate 50 */
+            --text-secondary: #cbd5e1; /* Slate 300 */
+            --text-muted: #64748b; /* Slate 500 */
+            
+            /* Professional UAV / Path Palette (Flat & High-Contrast) */
+            --uav-1: #3b82f6; /* Blue */
+            --uav-2: #8b5cf6; /* Violet */
+            --uav-3: #10b981; /* Emerald */
+            --uav-4: #f59e0b; /* Amber */
+            
+            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-primary);
+            font-family: 'Space Grotesk', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            line-height: 1.4;
+            font-size: 0.8rem;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        @keyframes fadeSlideUp {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        header {
+            padding: 0.5rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-panel);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            animation: fadeSlideUp 0.4s var(--ease-out-expo) forwards;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .logo-icon {
+            width: 1.5rem;
+            height: 1.5rem;
+            background: linear-gradient(135deg, var(--uav-1), var(--uav-2));
+            position: relative;
+            border-radius: 4px;
+        }
+
+        .logo-icon::after {
+            content: '';
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            width: 5px;
+            height: 5px;
+            background: var(--bg-panel);
+            border-radius: 1px;
+        }
+
+        h1 {
+            font-size: 1.05rem;
+            font-weight: 700;
+            letter-spacing: -0.2px;
+            text-transform: uppercase;
+            color: var(--text-primary);
+        }
+
+        .logo-subtitle {
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        nav ul {
+            display: flex;
+            list-style: none;
+            gap: 1.25rem;
+        }
+
+        nav a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            position: relative;
+            transition: color 0.15s;
+        }
+
+        nav a:hover, nav a.active {
+            color: var(--uav-1);
+        }
+
+        nav a::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 0;
+            width: 0%;
+            height: 2px;
+            background-color: var(--uav-1);
+            transition: width 0.25s var(--ease-out-expo);
+        }
+
+        nav a:hover::after, nav a.active::after {
+            width: 100%;
+        }
+
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: var(--left-width, 290px) 12px 1fr 12px var(--right-width, 300px);
+            padding: 0.5rem 1.25rem 0.75rem 1.25rem;
+            flex-grow: 1;
+            max-width: 1800px;
+            margin: 0 auto;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .resizer {
+            width: 12px;
+            cursor: col-resize;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            z-index: 10;
+        }
+
+        .resizer::after {
+            content: "";
+            position: absolute;
+            height: 30px;
+            width: 2px;
+            background: var(--border-color);
+            opacity: 0.6;
+            transition: opacity 0.15s, background-color 0.15s;
+            border-radius: 1px;
+        }
+
+        .resizer:hover::after, .resizer.dragging::after {
+            opacity: 1;
+            background-color: var(--uav-1);
+        }
+
+        .control-panel, .grid-panel, .analytics-panel {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            padding: 0.85rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.85rem;
+            opacity: 0;
+            animation: fadeSlideUp 0.4s var(--ease-out-expo) forwards;
+            overflow-y: auto;
+            border-radius: 8px;
+        }
+
+        .control-panel { animation-delay: 0.05s; }
+        .grid-panel { animation-delay: 0.1s; padding: 0; overflow: hidden; }
+        .analytics-panel { animation-delay: 0.15s; }
+
+        .panel-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.35rem;
+            margin-bottom: 0.05rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .grid-panel .panel-title {
+            margin: 0.85rem 0.85rem 0 0.85rem;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        label {
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        select {
+            width: 100%;
+            background: var(--bg-main);
+            border: 1px solid var(--border-color);
+            padding: 0.45rem 0.75rem;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.75rem;
+            font-weight: 600;
+            outline: none;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: border-color 0.15s;
+            background-image: url('data:image/svg+xml;utf8,<svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L5 5L9 1" stroke="rgba(203,213,225,0.7)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            appearance: none;
+            -webkit-appearance: none;
+        }
+
+        select:hover, select:focus {
+            border-color: var(--uav-1);
+        }
+        
+        input[type=range] {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: var(--bg-main);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+        }
+        
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 12px;
+            width: 12px;
+            border-radius: 50%;
+            background: var(--uav-1);
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+        }
+
+        .tool-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.35rem;
+        }
+
+        .btn-tool {
+            background: var(--bg-main);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.4rem;
+            font-size: 0.75rem;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+            border-radius: 4px;
+        }
+
+        .btn-tool:hover {
+            border-color: var(--border-hover);
+            color: var(--text-primary);
+        }
+        
+        .btn-tool.active {
+            background: var(--uav-1);
+            color: var(--bg-main);
+            border-color: var(--uav-1);
+            font-weight: 700;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .slider-value {
+            font-size: 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            color: var(--uav-1);
+        }
+
+        .algo-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .algo-card {
+            background: var(--bg-main);
+            border: 1px solid var(--border-color);
+            padding: 0.45rem 0.65rem;
+            cursor: pointer;
+            transition: all 0.15s;
+            text-align: left;
+            border-radius: 4px;
+        }
+
+        .algo-card:hover {
+            border-color: var(--border-hover);
+        }
+        
+        .algo-card.active {
+            border-color: var(--uav-1);
+            background: rgba(59, 130, 246, 0.1);
+        }
+        
+        .algo-card.active .algo-name {
+            color: var(--uav-1);
+        }
+
+        .algo-name {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 1px;
+            text-transform: uppercase;
+        }
+
+        .algo-desc {
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            line-height: 1.3;
+        }
+
+        .canvas-container {
+            flex-grow: 1;
+            background: #0b0f19;
+            border-top: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            cursor: crosshair;
+            z-index: 1;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .control-deck {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            padding: 0.35rem 0.85rem;
+            background: var(--bg-panel);
+        }
+
+        .btn-deck {
+            min-width: 2rem;
+            height: 2rem;
+            padding: 0 0.35rem;
+            border: 1px solid var(--border-color);
+            background: var(--bg-main);
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+            border-radius: 4px;
+        }
+
+        .btn-deck:hover {
+            border-color: var(--border-hover);
+        }
+
+        .btn-deck.btn-primary-play {
+            width: 2.8rem;
+            background: var(--uav-1);
+            color: var(--bg-main);
+            border-color: var(--uav-1);
+        }
+
+        .btn-deck.btn-primary-play:hover {
+            background: #60a5fa;
+            border-color: #60a5fa;
+        }
+
+        .deck-divider {
+            height: 1.3rem;
+            width: 1px;
+            background: var(--border-color);
+            margin: 0 0.15rem;
+        }
+
+        .terminal-container {
+            background: var(--bg-main);
+            border: 1px solid var(--border-color);
+            height: 100px;
+            padding: 0.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            overflow-y: auto;
+            color: #10b981;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            border-radius: 4px;
+        }
+
+        .terminal-line {
+            line-height: 1.3;
+            white-space: pre-wrap;
+        }
+        
+        .terminal-line::before {
+            content: "$ ";
+            color: #34d399;
+            opacity: 0.8;
+        }
+
+        .stats-badge-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.4rem;
+        }
+
+        .stats-badge {
+            border: 1px solid var(--border-color);
+            background: var(--bg-main);
+            padding: 0.45rem;
+            border-radius: 6px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 0.1rem;
+            justify-content: center;
+        }
+
+        .stats-badge-num {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .stats-badge-label {
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+        }
+
+        .chart-box {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .chart-row {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2/rem;
+        }
+
+        .chart-label-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .chart-bar-container {
+            height: 6px;
+            background: var(--bg-main);
+            border: 1px solid var(--border-color);
+            width: 100%;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .chart-bar {
+            height: 100%;
+            width: 0%;
+            background: var(--uav-1);
+            transition: width 0.8s var(--ease-out-expo);
+            border-radius: 3px;
+        }
+
+        .chart-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        
+        .legend-container {
+            font-size: 0.7rem; 
+            font-weight: 600;
+            display: flex; 
+            flex-direction: column; 
+            gap: 0.35rem; 
+            padding: 0.45rem 0.65rem; 
+            border: 1px solid var(--border-color);
+            background: var(--bg-main);
+            margin-top: 0.1rem;
+            border-radius: 6px;
+        }
+        
+        .legend-item {
+            display: flex; 
+            align-items: center; 
+            gap: 0.45rem;
+            color: var(--text-secondary);
+        }
+        
+        .legend-shape {
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-main); }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo-container">
+            <div class="logo-icon"></div>
+            <div>
+                <h1>TRAVERSE</h1>
+                <div class="logo-subtitle">Multi-UAV Path Planner</div>
+            </div>
+        </div>
+        <nav>
+            <ul>
+                <li><a href="#" class="active">PRIMAL Demo</a></li>
+                <li><a href="https://github.com/aliadeeba98/Multi-UAV-Path-Planner" target="_blank">Github</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <div class="dashboard-container">
+        
+        <!-- Left Side Control Panel -->
+        <div class="control-panel">
+            <div class="panel-title">CONFIGURATION</div>
+            
+            <div class="control-group">
+                <label for="map-preset">MAP PRESETS</label>
+                <select id="map-preset">
+                    <option value="empty-10-10">Empty (10x10)</option>
+                    <option value="random-10-10" selected>Random Obstacles (10x10)</option>
+                    <option value="warehouse-20-20">UAV Warehouse (20x20)</option>
+                    <option value="room-32-32-4">Four Rooms (32x32)</option>
+                    <option value="custom">-- Drawing Mode (Custom) --</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <div class="slider-header">
+                    <label for="grid-size">GRID SIZE</label>
+                    <span id="grid-size-val" class="slider-value">10 x 10</span>
+                </div>
+                <input type="range" id="grid-size" min="8" max="40" value="10" step="2">
+            </div>
+
+            <div class="control-group">
+                <label>INTERACTIVE DRAW TOOLS</label>
+                <div class="tool-grid">
+                    <button class="btn-tool active" data-tool="obstacle" id="tool-obstacle">■ Obstacle</button>
+                    <button class="btn-tool" data-tool="agent" id="tool-agent">▲ Place UAV</button>
+                    <button class="btn-tool" data-tool="goal" id="tool-goal">✚ Place Goal</button>
+                    <button class="btn-tool" data-tool="eraser" id="tool-eraser">⌫ Eraser</button>
+                </div>
+            </div>
+
+            <div style="height: 2px; background: var(--border-color); margin: 0.5rem 0;"></div>
+
+            <div class="control-group">
+                <label>PATH PLANNING ALGORITHM</label>
+                <div class="algo-list">
+                    <div class="algo-card active" data-algo="astar">
+                        <div class="algo-name">A* Search</div>
+                        <div class="algo-desc">Cooperative multi-agent classical A* planner. Fast, discrete, computes Manhattan grid distances.</div>
+                    </div>
+                    <div class="algo-card" data-algo="dstarlite">
+                        <div class="algo-name">D* Lite</div>
+                        <div class="algo-desc">Incremental pathfinder that dynamically recalculates paths locally when obstacles appear.</div>
+                    </div>
+                    <div class="algo-card" data-algo="qlearning">
+                        <div class="algo-name">Tabular Q-Learning</div>
+                        <div class="algo-desc">Live reinforcement learning! Trains a tabular Q-agent directly on the canvas layout in 30ms.</div>
+                    </div>
+                    <div class="algo-card" data-algo="dqn">
+                        <div class="algo-name">DQN Policy</div>
+                        <div class="algo-desc">Deterministic Deep Q-Network forward pass. Avoids obstacles smoothly using deep trained policies.</div>
+                    </div>
+                    <div class="algo-card" data-algo="sac">
+                        <div class="algo-name">SAC Policy</div>
+                        <div class="algo-desc">Soft Actor-Critic maximum-entropy exploration. Produces randomized curved exploratory paths.</div>
+                    </div>
+                    <div class="algo-card" data-algo="hybridpsosac">
+                        <div class="algo-name">Hybrid PSO-SAC</div>
+                        <div class="algo-desc">Combines Particle Swarm Optimization path baselines with reactive SAC policy collision evasion.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="resizer" id="resizer-left"></div>
+
+        <!-- Center Canvas Grid -->
+        <div class="grid-panel">
+            <div class="panel-title">SIMULATION ARENA</div>
+            <div class="canvas-container" id="canvas-container">
+                <canvas id="grid-canvas" width="500" height="500"></canvas>
+            </div>
+            
+            <div class="control-deck">
+                <button class="btn-deck" title="Step Backward" id="deck-prev">⏮</button>
+                <button class="btn-deck btn-primary-play" title="Play / Pause" id="deck-play">▶</button>
+                <button class="btn-deck" title="Step Forward" id="deck-next">⏭</button>
+                <div class="deck-divider"></div>
+                <button class="btn-deck" title="Clear Grid Elements" id="deck-clear">CLR</button>
+                <button class="btn-deck" title="Generate Random" id="deck-random">RND</button>
+                <div class="deck-divider"></div>
+                
+                <div class="control-group" style="flex-direction: row; gap: 0.75rem; align-items: center; width: 140px; margin-bottom: 0;">
+                    <label style="font-size: 0.75rem; white-space: nowrap; margin: 0;">SPEED</label>
+                    <input type="range" id="sim-speed" min="1" max="5" value="2" style="flex-grow: 1;">
+                    <span id="speed-val" class="slider-value" style="width: 20px;">2x</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="resizer" id="resizer-right"></div>
+
+        <!-- Right Side Telemetry Panel -->
+        <div class="analytics-panel">
+            <div class="panel-title">TELEMETRY & LOGS</div>
+            
+            <div class="terminal-container" id="terminal">
+                <div class="terminal-line">Traverse Pathfinding Engine initialized.</div>
+                <div class="terminal-line">Ready to deploy UAV Swarm. Select layout or draw elements.</div>
+            </div>
+            
+            <div class="panel-title" style="margin-top: 0.5rem;">LIVE STATISTICS</div>
+            
+            <div class="stats-badge-grid">
+                <div class="stats-badge">
+                    <span class="stats-badge-num" id="stat-status">N/A</span>
+                    <span class="stats-badge-label">SIM STATUS</span>
+                </div>
+                <div class="stats-badge">
+                    <span class="stats-badge-num" id="stat-time">0.0 ms</span>
+                    <span class="stats-badge-label">COMPUTE TIME</span>
+                </div>
+            </div>
+
+            <div class="chart-box">
+                <div class="chart-row">
+                    <div class="chart-label-row">
+                        <span>MAX PATH LENGTH (STEPS)</span>
+                        <span class="chart-value" id="val-steps">0</span>
+                    </div>
+                    <div class="chart-bar-container">
+                        <div class="chart-bar" id="bar-steps"></div>
+                    </div>
+                </div>
+                
+                <div class="chart-row">
+                    <div class="chart-label-row">
+                        <span>INTER-AGENT / WALL COLLISIONS</span>
+                        <span class="chart-value" id="val-collisions">0</span>
+                    </div>
+                    <div class="chart-bar-container">
+                        <div class="chart-bar" id="bar-collisions"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-group" style="margin-top: auto;">
+                <label>UAV TELEMETRY LEGEND</label>
+                <div class="legend-container">
+                    <div class="legend-item">
+                        <svg class="legend-shape" width="16" height="16"><circle cx="8" cy="8" r="6" fill="#3b82f6" stroke="#3b82f6" stroke-width="2"/></svg>
+                        <span>UAV 1 (Blue Circle, Solid Path)</span>
+                    </div>
+                    <div class="legend-item">
+                        <svg class="legend-shape" width="16" height="16"><rect x="2" y="2" width="12" height="12" fill="#8b5cf6" stroke="#8b5cf6" stroke-width="2"/></svg>
+                        <span>UAV 2 (Purple Square, Dashed Path)</span>
+                    </div>
+                    <div class="legend-item">
+                        <svg class="legend-shape" width="16" height="16"><polygon points="8,2 14,14 2,14" fill="#10b981" stroke="#10b981" stroke-width="2"/></svg>
+                        <span>UAV 3 (Green Triangle, Dotted Path)</span>
+                    </div>
+                    <div class="legend-item">
+                        <svg class="legend-shape" width="16" height="16"><polygon points="8,2 14,8 8,14 2,8" fill="#f59e0b" stroke="#f59e0b" stroke-width="2"/></svg>
+                        <span>UAV 4 (Amber Diamond, Dash-Dot Path)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const state = {
+            gridSize: 10,
+            obstacles: [],
+            starts: [], 
+            goals: [],  
+            selectedGoalIdx: null,
+            selectedUAVIdx: null,
+            activeTool: 'obstacle',
+            activeAlgo: 'astar',
+            activeMap: 'random-10-10',
+            
+            isPlaying: false,
+            simulationPaths: null,
+            simStep: 0,
+            maxSteps: 0,
+            playbackSpeed: 2,
+            lastFrameTime: 0,
+            transitionProgress: 0.0,
+            arrivedUAVs: new Set(),
+            
+            shapes: ['circle', 'square', 'triangle', 'diamond']
+        };
+
+        const canvas = document.getElementById('grid-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        function resizeCanvas() {
+            const container = document.getElementById('canvas-container');
+            const size = Math.min(container.clientWidth, container.clientHeight) - 24;
+            if (size > 0) {
+                canvas.width = size;
+                canvas.height = size;
+                draw();
+            }
+        }
+        
+        // Automatic ResizeObserver handles page resizes, drag panels, and initial renders seamlessly
+        const resizeObserver = new ResizeObserver(() => {
+            resizeCanvas();
+        });
+        resizeObserver.observe(document.getElementById('canvas-container'));
+        const mapPresetSelect = document.getElementById('map-preset');
+        const gridSlider = document.getElementById('grid-size');
+        const gridSliderVal = document.getElementById('grid-size-val');
+        const speedSlider = document.getElementById('sim-speed');
+        const speedVal = document.getElementById('speed-val');
+        
+        const btnPlay = document.getElementById('deck-play');
+        const btnPrev = document.getElementById('deck-prev');
+        const btnNext = document.getElementById('deck-next');
+        const btnClear = document.getElementById('deck-clear');
+        const btnRandom = document.getElementById('deck-random');
+        
+        const statStatus = document.getElementById('stat-status');
+        const statTime = document.getElementById('stat-time');
+        const barSteps = document.getElementById('bar-steps');
+        const barCollisions = document.getElementById('bar-collisions');
+        const valSteps = document.getElementById('val-steps');
+        const valCollisions = document.getElementById('val-collisions');
+        const terminal = document.getElementById('terminal');
+
+        document.querySelectorAll('.btn-tool').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.btn-tool').forEach(b => b.classList.remove('active'));
+                const target = e.currentTarget;
+                target.classList.add('active');
+                state.activeTool = target.dataset.tool;
+                state.selectedGoalIdx = null;
+                state.selectedUAVIdx = null;
+                draw();
+            });
+        });
+
+        document.querySelectorAll('.algo-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                document.querySelectorAll('.algo-card').forEach(c => c.classList.remove('active'));
+                const target = e.currentTarget;
+                target.classList.add('active');
+                state.activeAlgo = target.dataset.algo;
+                writeLog(`Switched pathfinder to: ${target.querySelector('.algo-name').innerText}`);
+                resetSimulation();
+            });
+        });
+
+        async function loadMaps() {
+            try {
+                const response = await fetch('/api/maps');
+                const maps = await response.json();
+                
+                function applyMap(mapId) {
+                    if (mapId === 'custom') return;
+                    const map = maps[mapId];
+                    if (!map) return;
+                    
+                    state.gridSize = map.grid_size;
+                    state.obstacles = JSON.parse(JSON.stringify(map.obstacles));
+                    state.starts = JSON.parse(JSON.stringify(map.starts));
+                    state.goals = JSON.parse(JSON.stringify(map.goals));
+                    
+                    state.selectedGoalIdx = null; 
+                    
+                    gridSlider.value = state.gridSize;
+                    gridSliderVal.innerText = `${state.gridSize} x ${state.gridSize}`;
+                    
+                    resetSimulation();
+                    writeLog(`Loaded layout: ${mapId}`);
+                }
+                
+                mapPresetSelect.addEventListener('change', (e) => {
+                    state.activeMap = e.target.value;
+                    state.selectedGoalIdx = null;
+                    applyMap(state.activeMap);
+                });
+                
+                applyMap(state.activeMap);
+                
+            } catch (err) {
+                writeLog(`Failed to load preset map configurations: ${err}`);
+            }
+        }
+
+        gridSlider.addEventListener('input', (e) => {
+            state.gridSize = parseInt(e.target.value);
+            gridSliderVal.innerText = `${state.gridSize} x ${state.gridSize}`;
+            mapPresetSelect.value = 'custom';
+            state.activeMap = 'custom';
+            state.selectedGoalIdx = null; 
+            
+            state.obstacles = state.obstacles.filter(o => o[0] < state.gridSize && o[1] < state.gridSize);
+            state.starts = state.starts.filter(s => s[0] < state.gridSize && s[1] < state.gridSize);
+            state.goals = state.goals.filter(g => g[0] < state.gridSize && g[1] < state.gridSize);
+            
+            resetSimulation();
+        });
+
+        speedSlider.addEventListener('input', (e) => {
+            state.playbackSpeed = parseInt(e.target.value);
+            speedVal.innerText = `${state.playbackSpeed}x`;
+        });
+
+        btnPlay.addEventListener('click', () => {
+            if (state.isPlaying) pauseSimulation();
+            else playSimulation();
+        });
+
+        btnPrev.addEventListener('click', () => {
+            if (state.simStep > 0) {
+                state.simStep--;
+                state.transitionProgress = 0.0;
+                writeLog(`Stepped back to frame ${state.simStep}`);
+                draw();
+            }
+        });
+
+        btnNext.addEventListener('click', () => {
+            if (state.simulationPaths && state.simStep < state.maxSteps) {
+                state.simStep++;
+                state.transitionProgress = 0.0;
+                writeLog(`Stepped forward to frame ${state.simStep}`);
+                draw();
+            }
+        });
+
+        btnClear.addEventListener('click', () => {
+            state.obstacles = [];
+            state.starts = [];
+            state.goals = [];
+            state.selectedGoalIdx = null;
+            mapPresetSelect.value = 'custom';
+            state.activeMap = 'custom';
+            resetSimulation();
+            writeLog(`Canvas cleared of all elements.`);
+        });
+
+        btnRandom.addEventListener('click', () => {
+            state.obstacles = [];
+            state.selectedGoalIdx = null;
+            const totalCells = state.gridSize * state.gridSize;
+            const targetCoverage = Math.floor(totalCells * 0.18);
+            
+            state.starts = [[1, 1], [1, state.gridSize - 2], [state.gridSize - 2, 1]];
+            state.goals = state.starts.map(s => [s[0], s[1]]);
+            
+            const reserved = new Set();
+            state.starts.forEach(s => reserved.add(`${s[0]},${s[1]}`));
+            
+            while (state.obstacles.length < targetCoverage) {
+                const rx = Math.floor(Math.random() * state.gridSize);
+                const ry = Math.floor(Math.random() * state.gridSize);
+                const key = `${rx},${ry}`;
+                
+                if (!reserved.has(key) && !state.obstacles.some(o => o[0] === rx && o[1] === ry)) {
+                    state.obstacles.push([rx, ry]);
+                }
+            }
+            
+            mapPresetSelect.value = 'custom';
+            state.activeMap = 'custom';
+            resetSimulation();
+            writeLog(`Procedural random grid coverage generated successfully.`);
+        });
+
+        let isMouseDown = false;
+
+        function getCellFromMouseEvent(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+            
+            const cellW = canvas.width / state.gridSize;
+            const cellH = canvas.height / state.gridSize;
+            
+            const col = Math.floor(x / cellW);
+            const row = Math.floor(y / cellH);
+            
+            return (col >= 0 && col < state.gridSize && row >= 0 && row < state.gridSize) ? [col, row] : null;
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            isMouseDown = true;
+            handleDrawing(e);
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isMouseDown && (state.activeTool === 'obstacle' || state.activeTool === 'eraser')) {
+                handleDrawing(e);
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            isMouseDown = false;
+        });
+
+        function handleDrawing(e) {
+            if (state.isPlaying) return; 
+            const cell = getCellFromMouseEvent(e);
+            if (!cell) return;
+            
+            const [cx, cy] = cell;
+            
+            const obsIdx = state.obstacles.findIndex(o => o[0] === cx && o[1] === cy);
+            const startIdx = state.starts.findIndex(s => s[0] === cx && s[1] === cy);
+            const goalIdx = state.goals.findIndex(g => g[0] === cx && g[1] === cy);
+
+            if (state.activeTool === 'eraser') {
+                if (obsIdx !== -1) state.obstacles.splice(obsIdx, 1);
+                if (startIdx !== -1) {
+                    state.starts.splice(startIdx, 1);
+                    if (state.goals.length > startIdx) state.goals.splice(startIdx, 1);
+                    state.selectedGoalIdx = null;
+                } else if (goalIdx !== -1) {
+                    state.goals.splice(goalIdx, 1);
+                    if (state.starts.length > goalIdx) state.starts.splice(goalIdx, 1);
+                    state.selectedGoalIdx = null;
+                }
+            } else if (state.activeTool === 'obstacle') {
+                let removed = false;
+                if (startIdx !== -1) {
+                    state.starts.splice(startIdx, 1);
+                    if (state.goals.length > startIdx) state.goals.splice(startIdx, 1);
+                    removed = true;
+                }
+                if (goalIdx !== -1 && !removed) {
+                    state.goals.splice(goalIdx, 1);
+                    if (state.starts.length > goalIdx) state.starts.splice(goalIdx, 1);
+                }
+                state.selectedGoalIdx = null;
+                if (obsIdx === -1) state.obstacles.push([cx, cy]);
+            } else if (state.activeTool === 'agent') {
+                if (startIdx !== -1) {
+                    state.selectedUAVIdx = startIdx;
+                    writeLog(`Selected UAV ${startIdx + 1}. Click any cell to move it.`);
+                } else {
+                    if (state.selectedUAVIdx !== null) {
+                        const selIdx = state.selectedUAVIdx;
+                        if (selIdx < state.starts.length) {
+                            if (obsIdx !== -1) state.obstacles.splice(obsIdx, 1);
+                            state.starts[selIdx] = [cx, cy];
+                            writeLog(`Repositioned UAV ${selIdx + 1} at (${cx}, ${cy})`);
+                        }
+                        state.selectedUAVIdx = null;
+                    } else {
+                        if (state.starts.length >= 4 && startIdx === -1) {
+                            writeLog(`Maximum active swarm size limited to 4 UAVs!`);
+                            return;
+                        }
+                        if (obsIdx !== -1) state.obstacles.splice(obsIdx, 1);
+                        
+                        if (startIdx === -1) {
+                            state.starts.push([cx, cy]);
+                            state.goals.push([cx, cy]);
+                            writeLog(`Placed UAV ${state.starts.length} and Goal at (${cx}, ${cy})`);
+                        }
+                    }
+                }
+            } else if (state.activeTool === 'goal') {
+                if (goalIdx !== -1) {
+                    state.selectedGoalIdx = goalIdx;
+                    writeLog(`Selected Goal of UAV ${goalIdx + 1}. Click any cell to move it.`);
+                } else if (startIdx !== -1) {
+                    state.selectedGoalIdx = startIdx;
+                    writeLog(`Selected Goal of UAV ${startIdx + 1}. Click any cell to move it.`);
+                } else {
+                    if (state.selectedGoalIdx !== null) {
+                        const selIdx = state.selectedGoalIdx;
+                        if (selIdx < state.goals.length) {
+                            if (obsIdx !== -1) state.obstacles.splice(obsIdx, 1);
+                            state.goals[selIdx] = [cx, cy];
+                            writeLog(`Positioned Goal of UAV ${selIdx + 1} at (${cx}, ${cy})`);
+                        }
+                        state.selectedGoalIdx = null;
+                    }
+                }
+            }
+            
+            mapPresetSelect.value = 'custom';
+            state.activeMap = 'custom';
+            resetSimulation();
+        }
+
+        function writeLog(text) {
+            const div = document.createElement('div');
+            div.className = `terminal-line`;
+            const time = new Date().toLocaleTimeString().split(' ')[0];
+            div.innerText = `[${time}] ${text}`;
+            terminal.appendChild(div);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        function resetSimulation() {
+            state.isPlaying = false;
+            state.simulationPaths = null;
+            state.simStep = 0;
+            state.maxSteps = 0;
+            state.transitionProgress = 0.0;
+            state.arrivedUAVs = new Set();
+            btnPlay.innerText = '▶';
+            statStatus.innerText = 'WAITING';
+            draw();
+        }
+
+        async function playSimulation() {
+            if (state.starts.length === 0 || state.starts.length !== state.goals.length) {
+                writeLog(`UAV starts must match goals! Ensure counts are equal.`);
+                return;
+            }
+            if (state.simulationPaths) {
+                state.isPlaying = true;
+                btnPlay.innerText = '⏸';
+                requestAnimationFrame(simTick);
+                writeLog(`Swarm evaluation resumed...`);
+                return;
+            }
+            writeLog(`Directing swarm coordinate calculations via ${state.activeAlgo.toUpperCase()}...`);
+            try {
+                statStatus.innerText = 'PLANNING';
+                
+                const response = await fetch('/api/plan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        grid_size: state.gridSize,
+                        obstacles: state.obstacles,
+                        starts: state.starts,
+                        goals: state.goals,
+                        algorithm: state.activeAlgo
+                    })
+                });
+                if (!response.ok) throw new Error(await response.text());
+                const data = await response.json();
+                
+                state.simulationPaths = data.paths;
+                state.maxSteps = Math.max(...data.paths.map(p => p.length)) - 1;
+                state.simStep = 0;
+                state.transitionProgress = 0.0;
+                state.arrivedUAVs = new Set();
+                state.isPlaying = true;
+                btnPlay.innerText = '⏸';
+                
+                statTime.innerText = `${data.metrics.time_ms.toFixed(1)} ms`;
+                valSteps.innerText = data.metrics.steps;
+                valCollisions.innerText = data.metrics.collisions;
+                
+                const scaleSteps = Math.min(100, (data.metrics.steps / (state.gridSize * 2)) * 100);
+                barSteps.style.width = `${scaleSteps}%`;
+                
+                const scaleCol = Math.min(100, (data.metrics.collisions / 10) * 100);
+                barCollisions.style.width = `${scaleCol}%`;
+                
+                if (data.metrics.success) {
+                    statStatus.innerText = 'SUCCESS';
+                    writeLog(`Pathing complete in ${data.metrics.time_ms}ms.`);
+                } else {
+                    statStatus.innerText = 'FAIL';
+                    writeLog(`Solver failed to complete route. Path penalties applied.`);
+                }
+                
+                state.lastFrameTime = performance.now();
+                requestAnimationFrame(simTick);
+            } catch (err) {
+                resetSimulation();
+                writeLog(`Solver encountered exception: ${err.message}`);
+            }
+        }
+
+        function pauseSimulation() {
+            state.isPlaying = false;
+            btnPlay.innerText = '▶';
+            writeLog(`Simulation playback paused.`);
+        }
+
+        function simTick(timestamp) {
+            if (!state.isPlaying) return;
+            const delta = timestamp - state.lastFrameTime;
+            state.lastFrameTime = timestamp;
+            const duration = 1000 / state.playbackSpeed;
+            state.transitionProgress += delta / duration;
+            
+            if (state.transitionProgress >= 1.0) {
+                state.transitionProgress = 0.0;
+                state.simStep++;
+                
+                // Check per-UAV arrival
+                if (state.simulationPaths) {
+                    state.simulationPaths.forEach((path, idx) => {
+                        if (path && state.simStep >= path.length - 1 && !state.arrivedUAVs.has(idx)) {
+                            state.arrivedUAVs.add(idx);
+                            const goal = path[path.length - 1];
+                            writeLog(`UAV-${idx+1} ✓ Arrived at target (${goal[0]}, ${goal[1]})`);
+                        }
+                    });
+                }
+                
+                // Stop when all UAVs arrived or max steps reached
+                const allArrived = state.simulationPaths && state.arrivedUAVs.size >= state.simulationPaths.length;
+                if (allArrived || state.simStep >= state.maxSteps) {
+                    state.simStep = Math.min(state.simStep, state.maxSteps);
+                    state.isPlaying = false;
+                    btnPlay.innerText = '▶';
+                    if (allArrived) {
+                        writeLog(`All UAVs have reached their destinations.`);
+                    } else {
+                        writeLog(`Simulation complete. ${state.arrivedUAVs.size}/${state.simulationPaths.length} UAVs arrived.`);
+                    }
+                }
+            }
+            draw();
+            if (state.isPlaying) requestAnimationFrame(simTick);
+        }
+
+        const drawShape = (ctx, type, x, y, size, isFilled) => {
+            ctx.beginPath();
+            if (type === 'circle') {
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+            } else if (type === 'square') {
+                ctx.rect(x - size, y - size, size * 2, size * 2);
+            } else if (type === 'triangle') {
+                ctx.moveTo(x, y - size);
+                ctx.lineTo(x + size, y + size);
+                ctx.lineTo(x - size, y + size);
+                ctx.closePath();
+            } else if (type === 'diamond') {
+                ctx.moveTo(x, y - size * 1.2);
+                ctx.lineTo(x + size * 1.2, y);
+                ctx.lineTo(x, y + size * 1.2);
+                ctx.lineTo(x - size * 1.2, y);
+                ctx.closePath();
+            }
+            if (isFilled) ctx.fill();
+            ctx.stroke();
+        };
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const cellW = canvas.width / state.gridSize;
+            const cellH = canvas.height / state.gridSize;
+            const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b'];
+            
+            // 1. Grid Lines
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= state.gridSize; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * cellW, 0); ctx.lineTo(i * cellW, canvas.height);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i * cellH); ctx.lineTo(canvas.width, i * cellH);
+                ctx.stroke();
+            }
+            
+            // 2. Paths
+            if (state.simulationPaths) {
+                const dashPatterns = [[], [6, 6], [2, 3], [8, 3, 2, 3]];
+                
+                state.simulationPaths.forEach((path, idx) => {
+                    if (!path || path.length < 2) return;
+                    
+                    ctx.save();
+                    ctx.strokeStyle = colors[idx % colors.length];
+                    ctx.lineWidth = 2.5;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.setLineDash(dashPatterns[idx % dashPatterns.length]);
+                    
+                    ctx.beginPath();
+                    path.forEach((pos, pIdx) => {
+                        if (pIdx <= state.simStep) {
+                            const cx = pos[0] * cellW + cellW/2;
+                            const cy = pos[1] * cellH + cellH/2;
+                            if (pIdx === 0) ctx.moveTo(cx, cy);
+                            else ctx.lineTo(cx, cy);
+                        }
+                    });
+                    
+                    if (state.simStep < path.length - 1) {
+                        const curr = path[state.simStep];
+                        const next = path[state.simStep + 1];
+                        
+                        const curX = curr[0] * cellW + cellW/2;
+                        const curY = curr[1] * cellH + cellH/2;
+                        const nexX = next[0] * cellW + cellW/2;
+                        const nexY = next[1] * cellH + cellH/2;
+                        
+                        const interpX = curX + (nexX - curX) * state.transitionProgress;
+                        const interpY = curY + (nexY - curY) * state.transitionProgress;
+                        
+                        ctx.lineTo(interpX, interpY);
+                    }
+                    ctx.stroke();
+                    ctx.restore();
+                });
+            }
+            
+            // 3. Obstacles
+            state.obstacles.forEach(o => {
+                const ox = o[0] * cellW;
+                const oy = o[1] * cellH;
+                const pad = 2;
+                
+                ctx.save();
+                ctx.fillStyle = '#334155'; /* Slate 700 */
+                ctx.strokeStyle = '#475569'; /* Slate 600 */
+                ctx.lineWidth = 1.5;
+                ctx.fillRect(ox + pad, oy + pad, cellW - pad*2, cellH - pad*2);
+                ctx.strokeRect(ox + pad, oy + pad, cellW - pad*2, cellH - pad*2);
+                ctx.restore();
+            });
+ 
+            // 4. Agents (UAVs)
+            const uavRadius = Math.min(cellW, cellH) * 0.28;
+            
+            state.starts.forEach((s, idx) => {
+                let posX = s[0];
+                let posY = s[1];
+                
+                if (state.simulationPaths && state.simulationPaths[idx]) {
+                    const path = state.simulationPaths[idx];
+                    if (state.simStep < path.length) {
+                        const curr = path[state.simStep];
+                        if (state.simStep < path.length - 1) {
+                            const next = path[state.simStep + 1];
+                            posX = curr[0] + (next[0] - curr[0]) * state.transitionProgress;
+                            posY = curr[1] + (next[1] - curr[1]) * state.transitionProgress;
+                        } else {
+                            posX = curr[0]; posY = curr[1];
+                        }
+                    } else {
+                        const last = path[path.length - 1];
+                        posX = last[0]; posY = last[1];
+                    }
+                }
+                
+                const ax = posX * cellW + cellW/2;
+                const ay = posY * cellH + cellH/2;
+                const shape = state.shapes[idx % state.shapes.length];
+                const uavColor = colors[idx % colors.length];
+                
+                if (state.selectedGoalIdx === idx) {
+                    ctx.save();
+                    ctx.strokeStyle = uavColor;
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([2, 2]);
+                    drawShape(ctx, shape, ax, ay, uavRadius * 1.4, false);
+                    ctx.restore();
+                }
+                
+                if (state.selectedUAVIdx === idx) {
+                    ctx.save();
+                    ctx.strokeStyle = uavColor;
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([3, 3]);
+                    ctx.strokeRect(ax - uavRadius * 1.5, ay - uavRadius * 1.5, uavRadius * 3, uavRadius * 3);
+                    ctx.restore();
+                }
+                
+                ctx.save();
+                ctx.fillStyle = uavColor;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                drawShape(ctx, shape, ax, ay, uavRadius, true);
+                
+                ctx.fillStyle = '#ffffff';
+                ctx.lineWidth = 0;
+                drawShape(ctx, shape, ax, ay, uavRadius * 0.35, true);
+                ctx.restore();
+                
+                // Arrival indicator: double ring when UAV has reached its goal
+                if (state.arrivedUAVs.has(idx)) {
+                    ctx.save();
+                    ctx.strokeStyle = uavColor;
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.arc(ax, ay, uavRadius * 1.4, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(ax, ay, uavRadius * 1.7, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            });
+
+            // 5. Goals
+            const timePulse = Date.now() * 0.005;
+            const pulseScale = 1.0 + Math.sin(timePulse) * 0.1;
+            
+            state.goals.forEach((g, idx) => {
+                const gx = g[0] * cellW + cellW/2;
+                const gy = g[1] * cellH + cellH/2;
+                const radius = Math.min(cellW, cellH) * 0.22 * pulseScale;
+                const shape = state.shapes[idx % state.shapes.length];
+                const uavColor = colors[idx % colors.length];
+                
+                if (state.selectedGoalIdx === idx && state.starts[idx]) {
+                    const sx = state.starts[idx][0] * cellW + cellW/2;
+                    const sy = state.starts[idx][1] * cellH + cellH/2;
+                    ctx.save();
+                    ctx.strokeStyle = uavColor;
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([4, 4]);
+                    ctx.beginPath();
+                    ctx.moveTo(sx, sy);
+                    ctx.lineTo(gx, gy);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+                
+                if (state.selectedGoalIdx === idx) {
+                    ctx.save();
+                    ctx.strokeStyle = uavColor;
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([2, 2]);
+                    drawShape(ctx, shape, gx, gy, radius * 1.6, false);
+                    ctx.restore();
+                }
+                
+                ctx.save();
+                ctx.strokeStyle = uavColor;
+                ctx.lineWidth = 2.5;
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                drawShape(ctx, shape, gx, gy, radius, true);
+                
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(gx - radius * 1.4, gy);
+                ctx.lineTo(gx + radius * 1.4, gy);
+                ctx.moveTo(gx, gy - radius * 1.4);
+                ctx.lineTo(gx, gy + radius * 1.4);
+                ctx.stroke();
+                ctx.restore();
+            });
+        }
+
+        // Resizer Logic
+        const dashboard = document.querySelector('.dashboard-container');
+        const resizerLeft = document.getElementById('resizer-left');
+        const resizerRight = document.getElementById('resizer-right');
+        
+        let isResizingLeft = false;
+        let isResizingRight = false;
+        
+        resizerLeft.addEventListener('mousedown', (e) => {
+            isResizingLeft = true;
+            resizerLeft.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            e.preventDefault();
+        });
+        
+        resizerRight.addEventListener('mousedown', (e) => {
+            isResizingRight = true;
+            resizerRight.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            e.preventDefault();
+        });
+        
+        window.addEventListener('mousemove', (e) => {
+            if (!isResizingLeft && !isResizingRight) return;
+            
+            const dashboardRect = dashboard.getBoundingClientRect();
+            
+            if (isResizingLeft) {
+                const paddingLeft = parseFloat(getComputedStyle(dashboard).paddingLeft) || 40;
+                let newWidth = e.clientX - dashboardRect.left - paddingLeft;
+                if (newWidth < 250) newWidth = 250;
+                if (newWidth > dashboardRect.width / 2 - 150) newWidth = dashboardRect.width / 2 - 150;
+                dashboard.style.setProperty('--left-width', `${newWidth}px`);
+            }
+            
+            if (isResizingRight) {
+                const paddingRight = parseFloat(getComputedStyle(dashboard).paddingRight) || 40;
+                let newWidth = dashboardRect.right - e.clientX - paddingRight;
+                if (newWidth < 250) newWidth = 250;
+                if (newWidth > dashboardRect.width / 2 - 150) newWidth = dashboardRect.width / 2 - 150;
+                dashboard.style.setProperty('--right-width', `${newWidth}px`);
+            }
+            
+            resizeCanvas();
+        });
+        
+        window.addEventListener('mouseup', () => {
+            if (isResizingLeft || isResizingRight) {
+                isResizingLeft = false;
+                isResizingRight = false;
+                resizerLeft.classList.remove('dragging');
+                resizerRight.classList.remove('dragging');
+                document.body.style.cursor = 'default';
+            }
+        });
+ 
+        resizeCanvas();
+        loadMaps();
+    </script>
+</body>
+</html>

@@ -1,3 +1,21 @@
+Metadata-Version: 2.4
+Name: traverse
+Version: 1.0.0
+Summary: TRAVERSE: Multi-UAV Path Planner using A*, D*, Q-Learning, DQN, SAC, and Hybrid PSO-SAC
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy>=1.20.0
+Requires-Dist: torch>=1.9.0
+Requires-Dist: tensorflow>=2.5.0
+Requires-Dist: fastapi>=0.95.0
+Requires-Dist: uvicorn>=0.20.0
+Requires-Dist: pydantic>=1.10.0
+Dynamic: license-file
+
 # 🛸 TRAVERSE: Multi-UAV Path Planner
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
